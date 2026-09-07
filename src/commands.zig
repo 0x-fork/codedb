@@ -496,7 +496,8 @@ pub fn runMcp(ctx: *RunCtx) !void {
     var deferred: mcp_server.DeferredScan = undefined;
     var maybe_deferred: ?*mcp_server.DeferredScan = null;
 
-    if (root_from_cwd) {
+    const lazy_start = cio.posixGetenv("CODEDB_LAZY_MCP") != null;
+    if (root_from_cwd or lazy_start) {
         deferred = .{
             .io = io,
             .allocator = allocator,
@@ -509,11 +510,13 @@ pub fn runMcp(ctx: *RunCtx) !void {
             .max_watched = cfg.max_watched,
             .startup_t0 = startup_t0,
             .fallback_cwd = abs_root,
+            .lazy_start = lazy_start,
+            .accept_client_roots = root_from_cwd,
             .triggerFn = triggerScanFromRoots,
         };
         deferred.scan_done.* = std.atomic.Value(bool).init(false);
         maybe_deferred = &deferred;
-        mcp_server.setScanState(.loading_snapshot);
+        mcp_server.setScanState(if (lazy_start) .idle else .loading_snapshot);
         explorer.expectStartupReconcile();
         watch_thread = try std.Thread.spawn(.{}, watcherDeferredLoop, .{&deferred});
     } else {
@@ -548,12 +551,16 @@ pub fn runMcp(ctx: *RunCtx) !void {
     // on this same stack frame for the whole process lifetime.
     var cli_activity = std.atomic.Value(i64).init(cio.milliTimestamp());
     var cli_listener_dead = std.atomic.Value(bool).init(false);
-    if (std.Thread.spawn(.{}, cliDaemonListen, .{ io, allocator, explorer, store, abs_root, data_dir, &cli_activity, &cli_listener_dead, true })) |cli_t| {
-        cli_t.detach();
-    } else |err| {
-        std.log.warn("cli-proxy: could not start listener: {s}", .{@errorName(err)});
+    // An idle explorer cannot answer CLI queries. In the opt-in trial CLI
+    // callers use their normal standalone fallback instead of this proxy.
+    if (!lazy_start) {
+        if (std.Thread.spawn(.{}, cliDaemonListen, .{ io, allocator, explorer, store, abs_root, data_dir, &cli_activity, &cli_listener_dead, true })) |cli_t| {
+            cli_t.detach();
+        } else |err| {
+            std.log.warn("cli-proxy: could not start listener: {s}", .{@errorName(err)});
+        }
+        spawnWarmup(io, allocator, explorer, data_dir, abs_root, &shutdown);
     }
-    spawnWarmup(io, allocator, explorer, data_dir, abs_root, &shutdown);
     mcp_server.run(io, allocator, store, explorer, &agents, abs_root, cfg.max_cached, &telem, maybe_deferred, &shutdown);
 
     shutdown.store(true, .release);

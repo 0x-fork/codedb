@@ -352,3 +352,49 @@ Override the default:
 - [RFC #346 — MCP root resolution](rfc-346-mcp-root-resolution.md) —
   full design + safety logic for project-root detection
 - [Telemetry](telemetry.md) — what codedb sends, how to disable
+
+## Experimental lazy startup
+
+Set `CODEDB_LAZY_MCP=1` in the **MCP server environment** to defer the default
+project's snapshot loading, scan, and watcher until the first code-tool request.
+This is opt-in and experimental; installers do not enable it. With the variable
+absent, startup behavior is unchanged. Remove the variable to disable it (setting
+it to `0` still enables it), then reconnect the MCP server.
+
+```bash
+CODEDB_LAZY_MCP=1 codedb /path/to/project mcp
+```
+
+For Codex, add the environment entry to the existing server configuration:
+
+```toml
+[mcp_servers.codedb]
+command = "/absolute/path/to/codedb"
+args = ["mcp"]
+env = { CODEDB_LAZY_MCP = "1" }
+```
+
+For clients using JSON configuration, add `"CODEDB_LAZY_MCP": "1"` to the
+codedb server's `env` object. Preserve any existing environment entries.
+Restart or reconnect the server after changing its environment.
+
+Initialization, tool discovery, ping, `codedb_status`, and `codedb_projects`
+leave the default project idle; status reports `scan: idle`. A code request
+without an explicit `project` starts normal initialization. Requests with a
+`project` argument continue through the existing project cache. Explicit
+positional roots retain precedence over client roots.
+
+The first default-project request can be slower: it waits up to 30 seconds for
+scan readiness, then returns a retry error if initialization is still running.
+Clients which poll status before sending any code request must account for the
+idle state. Once started, the watcher continues normally for the session lifetime.
+MCP connections remain open; this option does not terminate idle sessions.
+
+Lazy sessions skip speculative warmup and do not advertise the MCP process's
+CLI proxy. CLI queries use their existing standalone/daemon fallback instead,
+which can increase CLI startup cost. This option does not share indexes across
+worktrees, consolidate processes, change retrieval ranking, or reduce active
+watcher work. It helps when clients create sessions that never query code.
+
+See [the startup benchmark](bench-lazy-mcp.md) for measured results, limitations,
+and commands to reproduce the experiment.

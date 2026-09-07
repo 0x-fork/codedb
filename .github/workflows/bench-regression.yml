@@ -55,6 +55,7 @@ jobs:
           zig build test-watcher
           zig build -Doptimize=ReleaseFast
           python3 scripts/fd_regression_test.py --binary zig-out/bin/codedb
+          python3 scripts/e2e_lazy_mcp_test.py --binary zig-out/bin/codedb
 
   bench:
     runs-on: ubuntu-latest
