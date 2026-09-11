@@ -46,6 +46,9 @@ pub const DeferredScan = struct {
     scan_thread: ?std.Thread = null,
     resolved_root: []const u8 = "",
     fallback_cwd: []const u8 = "",
+    lazy_start: bool = false,
+    accept_client_roots: bool = true,
+    query_requested: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
     triggerFn: *const fn (ctx: *DeferredScan, abs_root: []const u8) void,
 };
 
@@ -59,11 +62,17 @@ pub fn triggerDeferredScanWithFallback(
     indexable_roots: []const Root,
     fallback_cwd: []const u8,
 ) bool {
+    if (ds.lazy_start and !ds.query_requested.load(.acquire)) return false;
     var path: []const u8 = "";
-    if (indexable_roots.len > 0) {
+    if (ds.accept_client_roots and indexable_roots.len > 0) {
         path = indexable_roots[0].path;
     }
-    if (path.len == 0 and fallback_cwd.len > 0 and root_policy.isIndexableRoot(fallback_cwd)) {
+    // Explicit roots were already admitted by Explorer.setRoot in main.
+    // Keep the stricter policy for an implicit cwd fallback.
+    if (path.len == 0 and fallback_cwd.len > 0 and
+        (root_policy.isIndexableRoot(fallback_cwd) or
+            (ds.lazy_start and !ds.accept_client_roots and ds.explorer.root_path != null)))
+    {
         path = fallback_cwd;
     }
     if (path.len == 0) return false;
@@ -578,7 +587,7 @@ pub const BenchContext = struct {
         agents: *AgentRegistry,
         telem: *telemetry_mod.Telemetry,
     ) void {
-        handleCall(io, alloc, root, stdout, id, store, explorer, agents, &self.cache, telem, null, null, null, true);
+        handleCall(io, alloc, root, stdout, id, store, explorer, agents, &self.cache, telem, null, null, null, true, &.{});
     }
 
     pub fn runToolCall(
@@ -1072,6 +1081,7 @@ pub const ScanState = enum(u8) {
     walking = 1,
     indexing = 2,
     ready = 3,
+    idle = 4,
 
     pub fn name(self: ScanState) []const u8 {
         return switch (self) {
@@ -1079,6 +1089,7 @@ pub const ScanState = enum(u8) {
             .walking => "walking",
             .indexing => "indexing",
             .ready => "ready",
+            .idle => "idle",
         };
     }
 };
@@ -1407,7 +1418,7 @@ pub fn run(
                 writeResultVersioned(alloc, stdout, id, resp, modern_results);
             }
         } else if (mcpj.eql(method, "tools/call")) {
-            handleCall(io, alloc, root, stdout, id, store, explorer, agents, &cache, telem, session.deferred_scan, &session.governor, session.client_name, requestUsesModernResults(root, session.modern_results));
+            handleCall(io, alloc, root, stdout, id, store, explorer, agents, &cache, telem, session.deferred_scan, &session.governor, session.client_name, requestUsesModernResults(root, session.modern_results), session.roots.items);
         } else if (mcpj.eql(method, "ping")) {
             if (!is_notification) writeResultVersioned(alloc, stdout, id, "{}", requestUsesModernResults(root, session.modern_results));
         } else if (mcpj.eql(method, "server/discover")) {
@@ -1649,6 +1660,7 @@ fn handleCall(
     governor: ?*ConvergenceGovernor,
     client_name: ?[]const u8,
     modern_results: bool,
+    roots: []const Root,
 ) void {
     const is_notification = id == null;
 
@@ -1682,6 +1694,23 @@ fn handleCall(
         if (!is_notification) writeError(alloc, stdout, id, -32602, "Unknown tool");
         return;
     };
+
+    // Experimental demand-driven startup: metadata requests must remain cheap.
+    if (deferred_scan) |ds| {
+        if (ds.lazy_start and tool != .codedb_status and tool != .codedb_projects and getStr(args, "project") == null) {
+            ds.query_requested.store(true, .release);
+            _ = triggerDeferredScanWithFallback(ds, roots, ds.fallback_cwd);
+            if (!ds.triggered.load(.acquire)) {
+                if (!is_notification) writeError(alloc, stdout, id, -32000, "No indexable root; send workspace roots or pass an explicit project.");
+                return;
+            }
+            waitForScanReady(30_000);
+            if (getScanState() != .ready) {
+                if (!is_notification) writeError(alloc, stdout, id, -32000, "Index is still starting; retry the tool request.");
+                return;
+            }
+        }
+    }
 
     var out: std.ArrayList(u8) = .empty;
     defer out.deinit(alloc);

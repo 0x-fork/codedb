@@ -161,6 +161,11 @@ The macOS/Linux shell installer registers codedb automatically. For npm/npx inst
 codedb mcp /path/to/your/project
 ```
 
+For clients that open many unused MCP sessions (for example, one per worktree),
+try experimental [lazy MCP startup](docs/mcp.md#experimental-lazy-startup) with
+`CODEDB_LAZY_MCP=1`. Indexing starts on the first code request; eager startup
+remains the default.
+
 ### As an HTTP server
 
 ```bash

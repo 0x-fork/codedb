@@ -2,8 +2,8 @@
 
 `codedb mcp` runs as a stdio JSON-RPC server speaking the
 [Model Context Protocol](https://spec.modelcontextprotocol.io/). It exposes
-21 tools for code intelligence — search, outline, callers, deps, edit,
-context, etc. — backed by the indexes in `~/.codedb/projects/<hash>/`.
+tools for code intelligence — search, outline, callers, dependencies, and
+task-shaped context — backed by the indexes in `~/.codedb/projects/<hash>/`.
 
 This guide covers per-client setup, how codedb decides which project to
 scan, and the most common failure modes.
@@ -352,3 +352,31 @@ Override the default:
 - [RFC #346 — MCP root resolution](rfc-346-mcp-root-resolution.md) —
   full design + safety logic for project-root detection
 - [Telemetry](telemetry.md) — what codedb sends, how to disable
+
+## Experimental lazy startup
+
+Set `CODEDB_LAZY_MCP=1` in your client's codedb MCP server environment, preserving
+existing entries, then reconnect the server. Installers do not enable this
+experimental option. Remove the variable to restore eager startup; setting it
+to `0` still enables it.
+
+```bash
+CODEDB_LAZY_MCP=1 codedb /path/to/project mcp
+```
+
+Initialization, tool discovery, ping, `codedb_status`, and `codedb_projects`
+leave the default project idle (`scan: idle`). The first code request without
+an explicit `project` starts snapshot loading, scanning, and normal watching.
+Requests with `project` continue through the existing project cache. Explicit
+positional roots retain precedence over client roots.
+
+The first default-project request waits up to 30 seconds for scan readiness,
+then returns a retry error if initialization is still running. Clients that poll
+status before requesting code must handle the idle state. Connections stay open;
+watchers continue normally once started.
+
+Lazy sessions skip speculative warmup and the MCP process's CLI proxy. CLI calls
+use their existing standalone/daemon fallback, which can increase startup cost.
+This option helps sessions that never query code; it does not share worktree
+indexes, consolidate processes, change retrieval ranking, or reduce active
+watcher work.
