@@ -1,72 +1,54 @@
 <p align="center">
-  <img src="assets/codedb.png" alt="codedb" width="200" />
-</p>
-
-<p align="center">
-  <a href="https://github.com/justrach/codedb/releases/latest"><img src="https://img.shields.io/github/v/release/justrach/codedb?style=flat-square&label=version" alt="Release" /></a>
-  <a href="https://github.com/justrach/codedb/blob/main/LICENSE"><img src="https://img.shields.io/github/license/justrach/codedb?style=flat-square" alt="License" /></a>
-  <img src="https://img.shields.io/badge/zig-0.17.0--dev-f7a41d?style=flat-square" alt="Zig 0.17.0-dev" />
-  <img src="https://img.shields.io/badge/status-alpha-orange?style=flat-square" alt="Alpha" />
-  <a href="https://deepwiki.com/justrach/codedb"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki" /></a>
-  <br />
-  <a href="https://trendshift.io/repositories/26207" target="_blank"><img src="https://trendshift.io/api/badge/repositories/26207" alt="justrach%2Fcodedb | Trendshift" width="250" height="55" /></a>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/codedb-map-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="docs/images/codedb-map-light.png" />
+    <img src="docs/images/codedb-map-light.png" alt="A cobalt-coated workshop rat maps a repository: source files become islands linked by symbols, callers, and dependencies." width="960" />
+  </picture>
 </p>
 
 <h1 align="center">codedb</h1>
-
-<h3 align="center">Code intelligence server for AI agents. Zig core. MCP native. Zero dependencies.</h3>
+<h3 align="center">Big repo. Little map. Find the code that matters.</h3>
 
 <p align="center">
-  Structural indexing · Trigram search · Word index · Dependency graph · File watching · MCP + HTTP
+  Code intelligence for your coding agent. Built in Zig. Connected over MCP.
 </p>
 
 <p align="center">
-  <em><strong>A context engine, not an editor.</strong> codedb helps agents <strong>find and understand</strong> code — search, symbols, callers, dependencies, outlines — and hands editing back to your native tools. codedb has no edit capability.</em>
+  <a href="https://github.com/justrach/codedb/releases/latest"><img src="https://img.shields.io/github/v/release/justrach/codedb?style=flat-square&label=release&color=2654d9" alt="Latest release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/justrach/codedb?style=flat-square&color=d45a43" alt="License" /></a>
+  <img src="https://img.shields.io/badge/built_in-Zig-f7a63b?style=flat-square" alt="Built in Zig" />
+  <img src="https://img.shields.io/badge/macOS_·_Linux_·_Windows-1b1714?style=flat-square" alt="macOS, Linux, Windows" />
 </p>
 
 <p align="center">
-  <a href="#-status">Status</a> ·
   <a href="#-install">Install</a> ·
-  <a href="#-quick-start">Quick Start</a> ·
-  <a href="#-mcp-tools">MCP Tools</a> ·
+  <a href="#-quick-start">Quick start</a> ·
+  <a href="#-mcp-tools">Tools</a> ·
   <a href="#-benchmarks">Benchmarks</a> ·
-  <a href="#️-architecture">Architecture</a> ·
-  <a href="#-data--privacy">Data & Privacy</a> ·
-  <a href="#-building-from-source">Building</a>
+  <a href="#-data--privacy">Data & privacy</a> ·
+  <a href="https://codegraff.com/#codedb">Meet the family ↗</a>
 </p>
 
----
+Your agent has a task. Somewhere in your repository are the definition it needs,
+the caller that explains it, and the test that keeps it honest. **codedb draws
+the map**: focused source context, symbols, callers, outlines, and dependencies.
+Your coding client uses its own native tools to make the edit.
 
-## Status
+**A context engine, not an editor.** codedb has no edit capability. Use it with
+Graff, Claude Code, Codex, Gemini CLI, Cursor, Windsurf, Devin, or another MCP client.
 
-> **Alpha software — API is stabilizing but may change**
->
-> codedb works and is used daily in production AI workflows, but:
-> - **Parser support** — Zig, C/C++, Python, TypeScript/JavaScript, Rust, Go, PHP, Ruby, HCL, R, Dart/Flutter, OCaml
-> - **Lightweight outline support** — Java, Kotlin, Svelte, Vue, Astro, shell, CSS/SCSS, SQL, protobuf, Fortran, LLVM IR, MLIR, and TableGen
-> - **No auth** — HTTP server binds to localhost only
-> - **Snapshot format** may change between versions
-> - **MCP protocol** is JSON-RPC 2.0 over stdio (stable)
+## 🧭 Give your agent a compass
 
-| What works today                                       | What's in progress                       |
-|--------------------------------------------------------|------------------------------------------|
-| 21 MCP tools for full codebase intelligence            | Deeper parser coverage and edge-case handling |
-| Trigram v2: integer doc IDs, batch-accumulate, merge intersect | Incremental segment-based indexing |
-| 538x faster than ripgrep on pre-indexed queries        | WASM target for Cloudflare Workers       |
-| O(1) inverted word index for identifier lookup         | Multi-project support                    |
-| Structural outlines (functions, structs, imports)      | mmap-backed trigram index                |
-| Reverse dependency graph                               |                                          |
-| Fallback editor: atomic line-range edits + version tracking          |                                          |
-| Auto-registration in Claude, Codex, Gemini, Cursor, Windsurf, Devin |                                |
-| Polling file watcher with filtered directory walker    |                                          |
-| Portable snapshot for instant MCP startup              |                                          |
-| Singleton MCP with PID lock + 1h idle timeout          |                                          |
-| Sensitive file blocking (.env, credentials, keys)      |                                          |
-| Codesigned + notarized macOS binaries — ARM64 and Intel (0.2.5833+) |                                          |
-| SHA256-verified release downloads and npm packages     |                                          |
-| Cross-platform: macOS (ARM/x86), Linux (ARM/x86), Windows (x86_64) |                              |
+| Ask your agent… | codedb helps it… |
+| --- | --- |
+| “Where does session refresh happen?” | Find relevant files and source excerpts with `codedb_context` |
+| “Explain this function and who uses it.” | Read the definition and callers with `codedb_explain` |
+| “How does this request reach the database?” | Trace a chain between symbols with `codedb_callpath` |
+| “What's in this part of the repo?” | Browse with `codedb_list_dir` and inspect file outlines |
 
----
+Structural search runs locally. **Default hybrid retrieval also uses hosted
+embeddings**; choose `semantic=local` for local-only retrieval. See
+[Data & Privacy](#-data--privacy) for what each mode sends and stores.
 
 ## ⚡ Install
 
@@ -132,6 +114,20 @@ This replaces the `codedb` binary with the latest GitHub Release and keeps your 
 
 Self-update works on native Windows from 0.2.5833 onward (`codedb update`). On older builds, rerun the PowerShell installer above to update or repair the binary.
 
+## 🌱 Project status
+
+**Alpha:** APIs and snapshot formats can change. The core speaks JSON-RPC 2.0
+over stdio, with an optional localhost HTTP server.
+
+- **Parsers:** Zig, C/C++, Python, TypeScript/JavaScript, Rust, Go, PHP, Ruby,
+  HCL, R, Dart/Flutter, and OCaml; more languages have lightweight outlines.
+- **Navigation:** task context, symbol definitions, callers, dependency graphs,
+  trigram search, and portable snapshots.
+- **Live updates:** bounded OS watches with periodic content verification for overflow.
+  Each MCP process owns its watcher; multiple clients can multiply background work.
+- **Distribution:** macOS, Linux, and Windows binaries; SHA256-verified downloads.
+  macOS releases are signed and notarized.
+
 ## Documentation
 
 - **[MCP setup](docs/mcp.md)** — per-client configurations (Claude Desktop, Cursor, VS Code, Claude Code, Codex CLI, Gemini CLI), root resolution, troubleshooting
@@ -158,7 +154,7 @@ Or install manually from [GitHub Releases](https://github.com/justrach/codedb/re
 
 ### As an MCP server (recommended)
 
-The macOS/Linux shell installer registers codedb automatically. For npm/npx installs on macOS/Linux and manual Windows installs, use the MCP configuration above or the client-specific examples in [docs/mcp.md](docs/mcp.md). Then open a project and the 21 MCP tools are available to your AI agent.
+The macOS/Linux shell installer registers codedb automatically. For npm/npx installs on macOS/Linux and manual Windows installs, use the MCP configuration above or the client-specific examples in [docs/mcp.md](docs/mcp.md). Then open a project and codedb’s tools are available to your AI agent.
 
 ```bash
 # Manual MCP start (auto-configured by install script)
@@ -187,7 +183,7 @@ codedb hot                            # recently modified files
 
 ## 🔧 MCP Tools
 
-22 tools over the Model Context Protocol (JSON-RPC 2.0 over stdio). Agents see five one-shots by default (`context`, `explain`, `callpath`, `list_dir`, `status`). codedb's job is to **give agents context** — **not** to be your editor. codedb has no edit tool; use your client's native edit tools.
+Tools over the Model Context Protocol (JSON-RPC 2.0 over stdio). Agents see five one-shots by default (`context`, `explain`, `callpath`, `list_dir`, `status`). codedb's job is to **give agents context** — **not** to be your editor. codedb has no edit tool; use your client's native edit tools.
 
 | Tool | Description |
 |------|-------------|
@@ -232,7 +228,7 @@ env var is set.
 
 ### Public repos — DeepWiki (remote MCP)
 
-codedb is deliberately local-only: it indexes *your* checked-out code. For
+codedb indexes *your* checked-out code. For
 questions about *public* GitHub repos, the installer registers
 [DeepWiki](https://deepwiki.com) (`https://mcp.deepwiki.com/mcp` — free, no
 auth) as a separate remote MCP server in each detected client, with tools
@@ -256,7 +252,7 @@ backed by api.wiki.codes was removed; DeepWiki replaces that role.)
 | `codedb snapshot` | Write codedb.snapshot to project root |
 | `codedb serve` | HTTP daemon on :7719 |
 | `codedb mcp [path]` | JSON-RPC/MCP server over stdio |
-| `codedb update` | Self-update to the latest release on macOS/Linux; on Windows rerun the PowerShell installer |
+| `codedb update` | Self-update to the latest release; older builds can be repaired with the installer |
 | `codedb nuke` | Uninstall codedb, remove caches/snapshots, and deregister MCP integrations |
 | `codedb --version` | Print version |
 
@@ -348,16 +344,16 @@ codedb v0.2.57 uses worker-local parallel scan with deterministic merge — each
 | 5,200 mixed files | 5,200 | **310 ms** | 0.06 ms | — |
 | [openclaw/openclaw](https://github.com/openclaw/openclaw) | 6,315 | **346 ms** | 0.05 ms | **10× faster** |
 
-Indexes are built once on startup. After that, the file watcher keeps them updated incrementally (single-file re-index: **<2ms**). Queries never re-scan the filesystem. For repos >1000 files, file contents are released after indexing to save ~300-500MB.
+Indexes are built on startup and the watcher keeps them updated. The historical single-file indexing time above excludes event coalescing, polling delay, and queueing. Indexed queries reuse the index; live listing and fallback reads may access the filesystem. For repos >1000 files, file contents are released after indexing to save ~300-500MB.
 
-### Background Resource Usage (`openclaw`, 6,315 files, Apple M4 Pro)
+### Historical background measurements (`openclaw`, 6,315 files, Apple M4 Pro)
 
 | Metric | v0.2.56 | v0.2.57 | Delta |
 |--------|---------|---------|-------|
 | Steady-state RSS | 1,867 MB | 1,706 MB | −161 MB |
 | `git` subprocesses / min (idle) | ~30 | ~0 | **mtime-gated** |
 
-The watcher now stats `.git/HEAD` mtime before forking `git rev-parse HEAD`. On an idle repo the subprocess never fires.
+The watcher stats `.git/HEAD` mtime before forking `git rev-parse HEAD`. These historical measurements do not bound watcher CPU under filesystem churn; see [the issue #748 reproduction](docs/watcher-748.md).
 ### Why codedb is fast
 
 - **MCP server** indexes once on startup → all queries hit in-memory data structures (O(1) hash lookups)
@@ -375,15 +371,13 @@ The watcher now stats `.git/HEAD` mtime before forking `git rev-parse HEAD`. On 
 | Inverted word index | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Dependency graph | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Version tracking | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Multi-agent locking | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Pre-indexed (warm) | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | No process startup | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | MCP protocol | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Full-text search | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Atomic file edits | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | File watcher | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 
-> **codedb = tree-sitter + search index + dependency graph + agent runtime.** Zero external dependencies. Pure Zig. Single binary.
+> **A map for the next step:** structural parsers, search indexes, and a dependency graph in one Zig binary.
 
 
 ---
@@ -416,7 +410,7 @@ The watcher now stats `.git/HEAD` mtime before forking `git rev-parse HEAD`. On 
     └──────────┬──────────┘
                │
     ┌──────────▼──────────┐
-    │     Watcher         │ ← polls every 2s
+    │     Watcher         │ ← OS events + overflow polling
     │   watcher.zig       │
     │  (FilteredWalker)   │
     └─────────────────────┘
@@ -425,8 +419,8 @@ The watcher now stats `.git/HEAD` mtime before forking `git rev-parse HEAD`. On 
 **No SQLite. No dependencies.** Purpose-built data model:
 
 - **Explorer** — structural index engine. Parses Zig, Python, TypeScript/JavaScript, Rust, Go, PHP, Ruby, HCL, R, and Dart. Maintains outlines, trigram index, inverted word index, content cache, and dependency graph behind a single mutex.
-- **Store** — append-only version log. Every mutation (snapshot, edit, delete) gets a monotonically increasing sequence number. Version history capped at 100 per file.
-- **Watcher** — polling file watcher (2s interval). `FilteredWalker` prunes `.git`, `node_modules`, `zig-cache`, `__pycache__`, etc. before descending.
+- **Store** — append-only version log. Every recorded file change (snapshot, modification, deletion) gets a monotonically increasing sequence number. Version history capped at 100 per file.
+- **Watcher** — bounded OS watches, 100ms event coalescing, and content verification for overflow about every 2s. `FilteredWalker` prunes `.git`, `node_modules`, `zig-cache`, `__pycache__`, etc. before descending.
 - **Agents** — first-class structs with cursors, heartbeats, and exclusive file locks. Stale agents reaped after 30s.
 
 ### Threading Model
@@ -434,7 +428,7 @@ The watcher now stats `.git/HEAD` mtime before forking `git rev-parse HEAD`. On 
 | Thread | Role |
 |--------|------|
 | Main | HTTP accept loop or MCP read loop |
-| Watcher | Polls filesystem every 2s via `FilteredWalker` |
+| Watcher | Reconciles OS events; verifies overflow contents via `FilteredWalker` |
 | ISR | Rebuilds snapshot when stale flag is set |
 | Reap | Cleans up stale agents every 5s |
 | Per-connection | HTTP server spawns a thread per connection |

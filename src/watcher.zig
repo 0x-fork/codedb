@@ -97,6 +97,8 @@ pub const DirMap = std.StringHashMap(DirState);
 pub const DirtySet = std.StringHashMap(void);
 pub var debug_unchanged_full_scans: usize = 0;
 pub var debug_unchanged_file_stats: usize = 0;
+pub var debug_directory_opens: usize = 0;
+pub var debug_content_reads: usize = 0;
 
 fn parentRel(path: []const u8) []const u8 {
     return if (std.mem.lastIndexOfScalar(u8, path, '/')) |i| path[0..i] else "";
@@ -1589,11 +1591,23 @@ const FileChangeWatch = struct {
         }
     }
 
+    // Only scheduled fallback audits use these invalidations. Never mix them
+    // into native events or watch rearming: unchanged overflow files must be
+    // hashed periodically, not once per unrelated filesystem notification.
     fn addUnwatched(self: *const FileChangeWatch, dirty: *DirtySet) void {
-        for (self.unwatched.items) |path| {
-            dirty.put(path, {}) catch {};
-        }
+        for (self.unwatched.items) |path| dirty.put(path, {}) catch {};
         for (self.unwatched_dirs.items) |path| dirty.put(path, {}) catch {};
+    }
+
+    fn retryUnwatchedDirs(self: *FileChangeWatch, io: std.Io, root_dir: std.Io.Dir, tmp: std.mem.Allocator) void {
+        if (comptime watch_kqueue) {
+            if (self.files.items.len >= self.max_watched) return;
+        }
+        var candidates = DirtySet.init(tmp);
+        defer candidates.deinit();
+        // Duplicate keys: rearming removes entries from unwatched_dirs.
+        for (self.unwatched_dirs.items) |path| rememberRearmPath(&candidates, path);
+        self.rearmDirty(io, root_dir, &candidates);
     }
 
     fn arm(self: *FileChangeWatch, io: std.Io, root_dir: std.Io.Dir, known: *const FileMap, dirs: *const DirMap) void {
@@ -2255,7 +2269,7 @@ test "directory watches follow repeated equal-count subtree replacements" {
     }
 }
 
-test "failed directory watch admission retries through dirty reconciliation" {
+test "failed directory watch admission retries without file invalidations" {
     if (!(comptime watch_kqueue or watch_inotify)) return;
     const testing = std.testing;
     const io = testing.io;
@@ -2286,9 +2300,8 @@ test "failed directory watch admission retries through dirty reconciliation" {
     defer arena.deinit();
     var dirty = DirtySet.init(arena.allocator());
     defer dirty.deinit();
-    watch.addUnwatched(&dirty);
-    try testing.expect(dirty.contains("late"));
-    watch.rearmDirty(io, root_dir, &dirty);
+    watch.retryUnwatchedDirs(io, root_dir, arena.allocator());
+    try testing.expectEqual(@as(usize, 0), dirty.count());
     try testing.expect(watch.hasWatchedDir("late"));
     try testing.expectEqual(@as(usize, 0), watch.unwatched_dirs.items.len);
     watch.markAllWatchedDirsDirty(&dirty);
@@ -2338,6 +2351,33 @@ test "issue-709: macOS vnode descriptor admission is strictly bounded" {
     try testing.expectEqual(@as(usize, 0), watch.files.items.len);
     try testing.expectEqual(@as(usize, 32), watch.unwatched.items.len);
     try testing.expectEqual(@as(usize, 1), watch.unwatched_dirs.items.len);
+}
+
+// .git/info/exclude lives outside the watched/indexed tree. Check its exact
+// identity along with root policies even when the OS reports no events.
+fn rootPolicyStates(io: std.Io, root: std.Io.Dir) [3]?DirState {
+    var states: [3]?DirState = .{ dirState(io, root, ".gitignore"), dirState(io, root, ".codedbignore"), null };
+    const git_dir = root.openDir(io, ".git", .{ .follow_symlinks = false }) catch return states;
+    defer git_dir.close(io);
+    const info_dir = git_dir.openDir(io, "info", .{ .follow_symlinks = false }) catch return states;
+    defer info_dir.close(io);
+    states[2] = dirState(io, info_dir, "exclude");
+    return states;
+}
+
+test "issue-748: unwatched repository exclude policy changes remain observable" {
+    const testing = std.testing;
+    const io = testing.io;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDirPath(io, ".git/info");
+    const before = rootPolicyStates(io, tmp.dir);
+    try tmp.dir.writeFile(io, .{ .sub_path = ".git/info/exclude", .data = "hidden.py\n" });
+    const after = rootPolicyStates(io, tmp.dir);
+    try testing.expect(!std.meta.eql(before, after));
+    try testing.expect(std.meta.eql(after, rootPolicyStates(io, tmp.dir)));
+    try tmp.dir.deleteFile(io, ".git/info/exclude");
+    try testing.expect(std.meta.eql(before, rootPolicyStates(io, tmp.dir)));
 }
 
 /// Background thread: polls for incremental FS changes.
@@ -2403,6 +2443,8 @@ pub fn incrementalLoop(io: std.Io, store: *Store, explorer: *Explorer, queue: *E
         break :blk @intCast(st.mtime.nanoseconds);
     };
 
+    var last_policy_states = rootPolicyStates(io, stable_root);
+    var polling_timer = cio.Timer.start() catch unreachable;
     while (!shutdown.load(.acquire)) {
         var wait_arena = std.heap.ArenaAllocator.init(backing);
         defer wait_arena.deinit();
@@ -2410,11 +2452,26 @@ pub fn incrementalLoop(io: std.Io, store: *Store, explorer: *Explorer, queue: *E
 
         if (watch.active) {
             watch.poll(&dirty, 2000);
+            // A timeout is a maximum wait, not a debounce. Bound hot event
+            // streams to one reconciliation per 100 ms; never wait for quiet.
+            if (dirty.count() > 0) {
+                cio.sleepMs(100);
+                watch.poll(&dirty, 0);
+            }
         } else {
             cio.sleepMs(2 * std.time.ns_per_s / 1_000_000);
         }
 
         drainNotifyFile(io, store, explorer, queue, &known, backing);
+
+        const policy_states = rootPolicyStates(io, stable_root);
+        if (!std.meta.eql(last_policy_states, policy_states)) {
+            // Re-list every cached directory: a policy removal can expose
+            // entries that were absent from both the file and parent indexes.
+            var dit = dirs.keyIterator();
+            while (dit.next()) |path| dirty.put(path.*, {}) catch {};
+            last_policy_states = policy_states;
+        }
 
         // Check if git HEAD changed — stat .git/HEAD mtime first to skip fork+exec (#254)
         var current_head: ?[40]u8 = last_git_head;
@@ -2482,10 +2539,29 @@ pub fn incrementalLoop(io: std.Io, store: *Store, explorer: *Explorer, queue: *E
 
         if (watch.active) {
             const had_events = dirty.count() > 0;
-            watch.addUnwatched(&dirty);
-            incrementalDiffDirty(io, store, explorer, queue, &known, &dirs, root, backing, cycle_arena.allocator(), &dirty) catch |err| {
-                std.log.err("watcher: diff failed: {}", .{err});
-            };
+            // Hash overflow files on a fixed cadence, independently of native
+            // events. Matching metadata alone is insufficient on coarse or
+            // remote filesystems; bounded periodic verification keeps them live.
+            const poll_due = polling_timer.read() >= 2 * std.time.ns_per_s;
+            if (poll_due) {
+                // Preserve the directory audit for nested ignore files and
+                // aliases, including policy files excluded from file watches.
+                // Fully watched files need no stats unless an event names them.
+                var polling_dirty = DirtySet.init(cycle_arena.allocator());
+                watch.addUnwatched(&polling_dirty);
+                incrementalDiffDirty(io, store, explorer, queue, &known, &dirs, root, backing, cycle_arena.allocator(), &polling_dirty) catch |err| {
+                    std.log.err("watcher: polling diff failed: {}", .{err});
+                };
+            }
+            if (poll_due) {
+                watch.retryUnwatchedDirs(io, stable_root, cycle_arena.allocator());
+                _ = polling_timer.lap();
+            }
+            if (had_events) {
+                incrementalDiffEvents(io, store, explorer, queue, &known, &dirs, root, backing, cycle_arena.allocator(), &dirty) catch |err| {
+                    std.log.err("watcher: event diff failed: {}", .{err});
+                };
+            }
             if (known.count() != watch.armed_files or dirs.count() != watch.armed_dirs) {
                 armAndCloseGap(io, &watch, stable_root, store, explorer, queue, &known, &dirs, root, backing);
             } else if (had_events) {
@@ -2572,6 +2648,40 @@ pub fn incrementalDiffDirty(
     tmp: std.mem.Allocator,
     dirty: ?*const DirtySet,
 ) !void {
+    return incrementalDiffSelected(io, store, explorer, queue, known, dirs, root, persistent, tmp, dirty, false);
+}
+
+/// Event-only reconciliation. The polling entry points deliberately retain
+/// full discovery semantics, including callers that pass an empty dirty set.
+pub fn incrementalDiffEvents(
+    io: std.Io,
+    store: *Store,
+    explorer: *Explorer,
+    queue: *EventQueue,
+    known: *FileMap,
+    dirs: ?*DirMap,
+    root: []const u8,
+    persistent: std.mem.Allocator,
+    tmp: std.mem.Allocator,
+    dirty: *const DirtySet,
+) !void {
+    if (dirty.count() == 0) return;
+    return incrementalDiffSelected(io, store, explorer, queue, known, dirs, root, persistent, tmp, dirty, true);
+}
+
+fn incrementalDiffSelected(
+    io: std.Io,
+    store: *Store,
+    explorer: *Explorer,
+    queue: *EventQueue,
+    known: *FileMap,
+    dirs: ?*DirMap,
+    root: []const u8,
+    persistent: std.mem.Allocator,
+    tmp: std.mem.Allocator,
+    dirty: ?*const DirtySet,
+    events_only: bool,
+) !void {
     _ = root;
     const dir = explorer.root_dir orelse return error.ProjectRootUnavailable;
 
@@ -2583,7 +2693,20 @@ pub fn incrementalDiffDirty(
 
     var ignore = try FilteredWalker.init(io, dir, tmp);
     defer ignore.deinit();
-    const parents = try buildParentIndex(known, tmp);
+    var parents = try buildParentIndex(known, dirs, tmp);
+    if (events_only) {
+        var affected = DirtySet.init(tmp);
+        var it = dirty.?.keyIterator();
+        while (it.next()) |path| {
+            var ancestor = path.*;
+            while (true) {
+                try affected.put(ancestor, {});
+                if (ancestor.len == 0) break;
+                ancestor = parentRel(ancestor);
+            }
+        }
+        parents.affected = affected;
+    }
     try walkRel(io, store, explorer, queue, known, dirs, &ignore, dir, "", persistent, tmp, &parents, dirty, false);
 
     // Detect deleted files
@@ -2642,6 +2765,7 @@ fn applyKnownFile(
     var content_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer content_arena.deinit();
     if (!shouldSkipFile(logical_path) and stat.size <= max_indexed_file_bytes) {
+        if (builtin.is_test) debug_content_reads += 1;
         if (project_file.readAllocNoFollow(io, dir, read_path, content_arena.allocator(), .limited(max_indexed_file_bytes))) |buf| {
             content = buf;
             hash = std.hash.Wyhash.hash(0, buf);
@@ -2675,9 +2799,22 @@ fn applyKnownFile(
 const ParentIndex = struct {
     files: std.StringHashMap(std.ArrayList([]const u8)),
     child_dirs: std.StringHashMap(std.StringHashMap(void)),
+    affected: ?DirtySet = null,
 };
 
-fn buildParentIndex(known: *const FileMap, tmp: std.mem.Allocator) !ParentIndex {
+fn markSubtreeSeen(known: *FileMap, parents: *const ParentIndex, prefix: []const u8, tmp: std.mem.Allocator) !void {
+    if (parents.files.get(prefix)) |files| {
+        for (files.items) |path| if (known.getPtr(path)) |state| {
+            state.seen = true;
+        };
+    }
+    if (parents.child_dirs.get(prefix)) |children| {
+        var it = children.keyIterator();
+        while (it.next()) |name| try markSubtreeSeen(known, parents, try joinRel(tmp, prefix, name.*), tmp);
+    }
+}
+
+fn buildParentIndex(known: *const FileMap, dirs: ?*const DirMap, tmp: std.mem.Allocator) !ParentIndex {
     var files = std.StringHashMap(std.ArrayList([]const u8)).init(tmp);
     var child_dirs = std.StringHashMap(std.StringHashMap(void)).init(tmp);
     var it = known.iterator();
@@ -2700,6 +2837,21 @@ fn buildParentIndex(known: *const FileMap, tmp: std.mem.Allocator) !ParentIndex 
             if (!gop.found_existing) gop.value_ptr.* = std.StringHashMap(void).init(tmp);
             try gop.value_ptr.put(name, {});
             dir_path = grand;
+        }
+    }
+    // Empty directories have no known file from which to infer ancestry.
+    // Keep them reachable so an event for their first file can be reconciled.
+    if (dirs) |known_dirs| {
+        var dit = known_dirs.keyIterator();
+        while (dit.next()) |path| {
+            var child = path.*;
+            while (child.len > 0) {
+                const parent = parentRel(child);
+                const gop = try child_dirs.getOrPut(parent);
+                if (!gop.found_existing) gop.value_ptr.* = std.StringHashMap(void).init(tmp);
+                try gop.value_ptr.put(std.fs.path.basename(child), {});
+                child = parent;
+            }
         }
     }
     return .{ .files = files, .child_dirs = child_dirs };
@@ -2740,6 +2892,7 @@ fn walkRel(
     // Open once, then validate the actual handle before observing its mtime,
     // identity, names, or sizes. Iterator kind and a pre-open realpath are
     // both racy; the full identity tuple also catches atomic directory swaps.
+    if (builtin.is_test) debug_directory_opens += 1;
     const listing = if (prefix.len == 0)
         dir
     else
@@ -2757,6 +2910,18 @@ fn walkRel(
     const force_scan = dirtyForcesDirectoryScan(dirty, known, prefix);
     const dir_unchanged = !force_scan and current_dir_state != null and cached_dir_state != null and std.meta.eql(current_dir_state.?, cached_dir_state.?);
 
+    // With no inherited ignore rules, a validated unchanged directory outside
+    // the event ancestry can retain its subtree without opening descendants.
+    // Ignore-bearing trees take the conservative walk so rule changes and
+    // directory aliases still pass through the existing safety checks.
+    if (dir_unchanged and !ignore.hasIgnoreRules() and !effective_through_symlink) {
+        if (parents.affected) |affected| {
+            if (!affected.contains(prefix)) {
+                try markSubtreeSeen(known, parents, prefix, tmp);
+                return;
+            }
+        }
+    }
     if (dir_unchanged) {
         if (parents.files.get(prefix)) |file_list| {
             for (file_list.items) |path| {
@@ -3299,4 +3464,75 @@ test "security: notify channel refuses symlinks and accepts owner regular files"
     const content = try tmp.dir.readFileAlloc(io, "owned", t.allocator, .limited(1024));
     defer t.allocator.free(content);
     try t.expectEqualStrings("notification", content);
+}
+
+test "watch budget fallback detects same-metadata rewrites" {
+    const testing = std.testing;
+    const io = testing.io;
+    // Exercise per-file budget overflow and directory-level fallback separately.
+    for ([_]bool{ false, true }) |poll_directory| {
+        var tmp = testing.tmpDir(.{});
+        defer tmp.cleanup();
+        try tmp.dir.createDirPath(io, "src");
+        const before = "def original():\n    return 1\n";
+        const after = "def modified():\n    return 2\n";
+        try testing.expectEqual(before.len, after.len);
+        try tmp.dir.writeFile(io, .{ .sub_path = "src/a.py", .data = before });
+        var root_buf: [std.fs.max_path_bytes]u8 = undefined;
+        const root_len = try tmp.dir.realPathFile(io, ".", &root_buf);
+        const root = root_buf[0..root_len];
+        var store = Store.init(testing.allocator);
+        defer store.deinit();
+        var explorer = Explorer.init(testing.allocator, Explorer.DEFAULT_CONTENT_CACHE_CAPACITY);
+        defer explorer.deinit();
+        try explorer.setRoot(io, root);
+        var known = FileMap.init(testing.allocator);
+        defer {
+            var it = known.keyIterator();
+            while (it.next()) |path| testing.allocator.free(path.*);
+            known.deinit();
+        }
+        var dirs = DirMap.init(testing.allocator);
+        defer {
+            var it = dirs.keyIterator();
+            while (it.next()) |path| testing.allocator.free(path.*);
+            dirs.deinit();
+        }
+        const queue = try testing.allocator.create(EventQueue);
+        defer testing.allocator.destroy(queue);
+        queue.* = .{};
+        {
+            var arena = std.heap.ArenaAllocator.init(testing.allocator);
+            defer arena.deinit();
+            try incrementalDiffInner(io, &store, &explorer, queue, &known, &dirs, root, testing.allocator, arena.allocator());
+        }
+        try tmp.dir.writeFile(io, .{ .sub_path = "src/a.py", .data = after });
+        const root_dir = explorer.root_dir orelse return error.TestUnexpectedResult;
+        const stat = try root_dir.statFile(io, "src/a.py", .{ .follow_symlinks = false });
+        const old = known.getPtr("src/a.py").?;
+        // Model a same-size write whose timestamps and identity collide with
+        // the previously indexed metadata, without needing a special mount.
+        old.mtime = @intCast(@divTrunc(stat.mtime.nanoseconds, std.time.ns_per_ms));
+        old.mtime_ns = stat.mtime.nanoseconds;
+        old.ctime_ns = stat.ctime.nanoseconds;
+        old.inode = stat.inode;
+        old.size = stat.size;
+        old.hash = std.hash.Wyhash.hash(0, before);
+        var watch = FileChangeWatch.init(testing.allocator, 0);
+        defer watch.deinit(io);
+        if (poll_directory) watch.rememberUnwatchedDir("src") else watch.rememberUnwatched("src/a.py");
+        {
+            var arena = std.heap.ArenaAllocator.init(testing.allocator);
+            defer arena.deinit();
+            var dirty = DirtySet.init(arena.allocator());
+            watch.addUnwatched(&dirty);
+            try incrementalDiffDirty(io, &store, &explorer, queue, &known, &dirs, root, testing.allocator, arena.allocator(), &dirty);
+        }
+        var out: std.ArrayList(u8) = .empty;
+        defer out.deinit(testing.allocator);
+        try testing.expect(try explorer.renderOutline("src/a.py", testing.allocator, &out, false));
+        try testing.expect(std.mem.indexOf(u8, out.items, "modified") != null);
+        try testing.expect(std.mem.indexOf(u8, out.items, "original") == null);
+        try testing.expectEqual(std.hash.Wyhash.hash(0, after), known.get("src/a.py").?.hash);
+    }
 }

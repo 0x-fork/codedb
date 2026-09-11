@@ -3878,7 +3878,7 @@ test "watcher directory event defeats stale mtime probe for atomic rename" {
     {
         var arena = std.heap.ArenaAllocator.init(testing.allocator);
         defer arena.deinit();
-        try watcher.incrementalDiffDirty(io, &store, &explorer, queue, &known, &dirs, root, testing.allocator, arena.allocator(), &dirty);
+        try watcher.incrementalDiffEvents(io, &store, &explorer, queue, &known, &dirs, root, testing.allocator, arena.allocator(), &dirty);
     }
     var out: std.ArrayList(u8) = .empty;
     defer out.deinit(testing.allocator);
@@ -3943,7 +3943,7 @@ test "unknown dirty child forces parent listing without admitting sensitive file
     {
         var arena = std.heap.ArenaAllocator.init(testing.allocator);
         defer arena.deinit();
-        try watcher.incrementalDiffDirty(io, &store, &explorer, queue, &known, &dirs, root, testing.allocator, arena.allocator(), &dirty);
+        try watcher.incrementalDiffEvents(io, &store, &explorer, queue, &known, &dirs, root, testing.allocator, arena.allocator(), &dirty);
     }
     try testing.expect(known.contains("src/new.py"));
     try testing.expect(!known.contains(".env"));
@@ -4133,4 +4133,111 @@ test "experiment-694: quiet dirty cycle is cheaper than stat-all" {
         "\nexperiment-694 files={d} first={d}ms quiet={d}ms stats={d} fallback={d}ms stats={d} edit={d}ms sibling={d}ms\n",
         .{ file_count, first_ms, quiet_ms, quiet_stats, fallback_ms, fallback_stats, edit_ms, sibling_ms },
     );
+}
+
+test "issue-748: event reconciliation bounds quiet and skipped-file filesystem work" {
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try tmp.dir.createDirPath(io, "src/deep/nested");
+    try tmp.dir.createDirPath(io, "empty/nested");
+    try tmp.dir.writeFile(io, .{ .sub_path = "src/deep/nested/a.py", .data = "def a():\n    return 1\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "src/deep/nested/b.py", .data = "def b():\n    return 1\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "keep.py", .data = "def keep():\n    return 1\n" });
+
+    var root_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const root_len = try tmp.dir.realPathFile(io, ".", &root_buf);
+    const root = root_buf[0..root_len];
+
+    var store = Store.init(testing.allocator);
+    defer store.deinit();
+    var explorer = Explorer.init(testing.allocator, Explorer.DEFAULT_CONTENT_CACHE_CAPACITY);
+    defer explorer.deinit();
+    try explorer.setRoot(io, root);
+
+    var known = watcher.FileMap.init(testing.allocator);
+    defer {
+        var iter = known.keyIterator();
+        while (iter.next()) |path| testing.allocator.free(path.*);
+        known.deinit();
+    }
+    var dirs = watcher.DirMap.init(testing.allocator);
+    defer {
+        var iter = dirs.keyIterator();
+        while (iter.next()) |path| testing.allocator.free(path.*);
+        dirs.deinit();
+    }
+
+    const queue = try heapEventQueue();
+    defer testing.allocator.destroy(queue);
+    {
+        var arena = std.heap.ArenaAllocator.init(testing.allocator);
+        defer arena.deinit();
+        try watcher.incrementalDiffInner(io, &store, &explorer, queue, &known, &dirs, root, testing.allocator, arena.allocator());
+    }
+    try testing.expectEqual(@as(u32, 3), known.count());
+
+    // Capture exact metadata before measuring steady state.
+    {
+        var arena = std.heap.ArenaAllocator.init(testing.allocator);
+        defer arena.deinit();
+        try watcher.incrementalDiffInner(io, &store, &explorer, queue, &known, &dirs, root, testing.allocator, arena.allocator());
+    }
+    var dirty = watcher.DirtySet.init(testing.allocator);
+    defer dirty.deinit();
+    watcher.debug_directory_opens = 0;
+    watcher.debug_content_reads = 0;
+    {
+        var arena = std.heap.ArenaAllocator.init(testing.allocator);
+        defer arena.deinit();
+        try watcher.incrementalDiffEvents(io, &store, &explorer, queue, &known, &dirs, root, testing.allocator, arena.allocator(), &dirty);
+    }
+    try testing.expectEqual(@as(usize, 0), watcher.debug_directory_opens);
+    try testing.expectEqual(@as(usize, 0), watcher.debug_content_reads);
+    try tmp.dir.writeFile(io, .{ .sub_path = "noise.lock", .data = "ignored" });
+    try dirty.put("", {});
+    {
+        var arena = std.heap.ArenaAllocator.init(testing.allocator);
+        defer arena.deinit();
+        try watcher.incrementalDiffEvents(io, &store, &explorer, queue, &known, &dirs, root, testing.allocator, arena.allocator(), &dirty);
+    }
+    // Root and its immediate children are validated; deep descendants stay closed.
+    try testing.expectEqual(@as(usize, 3), watcher.debug_directory_opens);
+    try testing.expect(watcher.debug_content_reads <= 1); // only root's actual invalidation
+    try testing.expectEqual(@as(u32, 3), known.count());
+    try testing.expect(known.contains("src/deep/nested/a.py"));
+
+    // Overflow polling keeps the metadata fast path, but still detects edits
+    // and new/deleted files without relying on an OS event.
+    watcher.debug_content_reads = 0;
+    {
+        var arena = std.heap.ArenaAllocator.init(testing.allocator);
+        defer arena.deinit();
+        try watcher.incrementalDiffInner(io, &store, &explorer, queue, &known, &dirs, root, testing.allocator, arena.allocator());
+    }
+    try testing.expectEqual(@as(usize, 0), watcher.debug_content_reads);
+    try tmp.dir.writeFile(io, .{ .sub_path = "src/deep/nested/a.py", .data = "def changed():\n    return 2\n" });
+    try tmp.dir.deleteFile(io, "src/deep/nested/b.py");
+    try tmp.dir.writeFile(io, .{ .sub_path = "src/deep/nested/new.py", .data = "def new_file():\n    return 3\n" });
+    {
+        var arena = std.heap.ArenaAllocator.init(testing.allocator);
+        defer arena.deinit();
+        try watcher.incrementalDiffInner(io, &store, &explorer, queue, &known, &dirs, root, testing.allocator, arena.allocator());
+    }
+    try testing.expectEqual(@as(u32, 3), known.count());
+    try testing.expect(!known.contains("src/deep/nested/b.py"));
+    try testing.expect(known.contains("src/deep/nested/new.py"));
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(testing.allocator);
+    try testing.expect(try explorer.renderOutline("src/deep/nested/a.py", testing.allocator, &out, false));
+    try testing.expect(std.mem.indexOf(u8, out.items, "changed") != null);
+    try tmp.dir.writeFile(io, .{ .sub_path = "empty/nested/first.py", .data = "def first():\n    return 1\n" });
+    dirty.clearRetainingCapacity();
+    try dirty.put("empty/nested/first.py", {});
+    {
+        var arena = std.heap.ArenaAllocator.init(testing.allocator);
+        defer arena.deinit();
+        try watcher.incrementalDiffEvents(io, &store, &explorer, queue, &known, &dirs, root, testing.allocator, arena.allocator(), &dirty);
+    }
+    try testing.expect(known.contains("empty/nested/first.py"));
 }
