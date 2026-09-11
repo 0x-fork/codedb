@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.2.5855 - 2026-09-11
+
+- Reduce watcher work under filesystem churn with bounded event coalescing and separate two-second overflow verification; preserve hashing for same-metadata rewrites.
+- Reject unrelated paths before watch-registration lookups (#747).
+- Add experimental demand-driven MCP startup behind `CODEDB_LAZY_MCP=1`; eager startup remains the default (#747).
+- Stop advertising fabricated fallback update versions and distinguish stale automatic metadata from explicit downgrade requests (#742, #745).
+- Refresh the README with task-oriented examples and Codegraff-inspired light/dark illustrations.
+
 ## 0.2.5854 - 2026-09-05
 
 - Authenticate Unix CLI daemon peers and validate notification-file ownership and type before consuming edits.

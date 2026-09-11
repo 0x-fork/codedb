@@ -270,7 +270,9 @@ pub fn watcherDeferredLoop(ctx: *mcp_server.DeferredScan) void {
     const give_up_after_ms: i64 = 13000;
     var fallback_attempted = false;
     while (!ctx.scan_done.load(.acquire) and !ctx.shutdown.load(.acquire)) {
-        cio.sleepMs(50);
+        cio.sleepMs(if (ctx.lazy_start) 250 else 50);
+        // Demand-driven sessions stay connected without the timed cwd scan.
+        if (ctx.lazy_start) continue;
         const elapsed = cio.milliTimestamp() - t0;
         if (!fallback_attempted and elapsed >= fallback_after_ms) {
             fallback_attempted = true;

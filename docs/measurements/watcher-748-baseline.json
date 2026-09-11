@@ -1,0 +1,29 @@
+{
+  "directories": 1200,
+  "files": 4800,
+  "phases": [
+    {
+      "phase": "quiet",
+      "cpu_seconds": 1.33,
+      "wall_seconds": 20.01679320796393,
+      "cpu_percent": 6.644420942865329,
+      "churn_pairs": 0
+    },
+    {
+      "phase": "churn",
+      "cpu_seconds": 19.96,
+      "wall_seconds": 20.002702166093513,
+      "cpu_percent": 99.78651801272181,
+      "churn_pairs": 811
+    }
+  ],
+  "status_before": "codedb status:\n  seq: 4803\n  files: 4802\n  outlines: 4801\n  contents_cached: 0\n  trigram_index: mmap (4800 files)\n  index_memory: 67725KB\n  scan: ready\n",
+  "status_after": "codedb status:\n  seq: 4803\n  files: 4802\n  outlines: 4801\n  contents_cached: 0\n  trigram_index: mmap (4800 files)\n  index_memory: 67725KB\n  scan: ready\n",
+  "index_unchanged": true,
+  "binary_sha256": "41134c2d2703436e4126399f0473e6331ad9ef84e85261531a018677d5f1035b",
+  "source_revision": "4eaca89",
+  "build": "ReleaseFast; Zig 0.17.0-dev.813+2153f8143",
+  "host": "Apple M4 Pro; macOS 26.6.2",
+  "measurement": "one twenty-second quiet window followed by one twenty-second churn window; process CPU time from ps; candidate run before baseline",
+  "note": "Same 4800-source-file generator; each process held its own files/seq unchanged. Total indexed counts differed by one; the additional baseline entry was not isolated. Synthetic workload, not a general CPU guarantee."
+}
