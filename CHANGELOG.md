@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.5856 - 2026-09-19
+
+- Skip `.worktrees` during indexing and listing so Git worktree forests cannot exhaust the macOS directory watch budget (#754). A scan root that is itself a worktree checkout is still indexed.
+
 ## 0.2.5855 - 2026-09-11
 
 - Reduce watcher work under filesystem churn with bounded event coalescing and separate two-second overflow verification; preserve hashing for same-metadata rewrites.
