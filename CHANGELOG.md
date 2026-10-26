@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.5861 - 2026-10-26
+
+- Use recursive macOS events on local APFS/HFS volumes, with at most 64 content probes every two seconds and directory audits every 60 seconds, reducing idle watcher CPU (#756, #758). Fallback filesystems retain conservative polling. Each MCP client still owns a watcher.
+- Require a unique SHA-256 checksum and working hash tool before replacing an installed binary; preserve existing installations and client configuration on verification failure (#759).
+
 ## 0.2.5860 - 2026-09-27
 
 - `codedb semantic-index` sends larger batches with more requests in flight, so hosted index builds finish faster.
