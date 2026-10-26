@@ -3003,7 +3003,10 @@ fn applyKnownFile(
     old.seen = true;
     const mtime: i64 = @intCast(@divTrunc(stat.mtime.nanoseconds, std.time.ns_per_ms));
     const exact_metadata_matches = old.mtime_ns != 0 and old.mtime_ns == stat.mtime.nanoseconds and old.ctime_ns == stat.ctime.nanoseconds and old.inode == stat.inode and old.size == stat.size;
-    if (!force_read and exact_metadata_matches) {
+    // Files above the indexing cap have no content hash to verify. A forced
+    // probe must not manufacture a new version for unchanged metadata; size
+    // or identity changes still fall through, including becoming indexable.
+    if (exact_metadata_matches and (!force_read or stat.size > max_indexed_file_bytes)) {
         store.noteMtime(logical_path, mtime);
         return;
     }
@@ -3681,6 +3684,50 @@ test "issue-685: watcher diff updates document edges for modify add and delete" 
     const links = explorer.document_graph.getForwardDeps("docs/a.md") orelse return error.TestUnexpectedResult;
     try testing.expectEqual(@as(usize, 1), links.len);
     try testing.expectEqualStrings("docs/c.md", links[0]);
+}
+
+test "issue-756: oversized probes retain versions and shrinking files become indexed" {
+    const io = std.testing.io;
+    const alloc = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const large = try alloc.alloc(u8, max_indexed_file_bytes + 1);
+    defer alloc.free(large);
+    @memset(large, 'x');
+    try tmp.dir.writeFile(io, .{ .sub_path = "large.py", .data = large });
+    var root_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const root_len = try tmp.dir.realPathFile(io, ".", &root_buf);
+    const root = root_buf[0..root_len];
+    var store = Store.init(alloc);
+    defer store.deinit();
+    var explorer = Explorer.init(alloc, Explorer.DEFAULT_CONTENT_CACHE_CAPACITY);
+    defer explorer.deinit();
+    try explorer.setRoot(io, root);
+    var known = FileMap.init(alloc);
+    defer known.deinit();
+    const queue = try alloc.create(EventQueue);
+    defer alloc.destroy(queue);
+    queue.* = .{};
+    var arena = std.heap.ArenaAllocator.init(alloc);
+    defer arena.deinit();
+    var stat = try tmp.dir.statFile(io, "large.py", .{ .follow_symlinks = false });
+    try known.put("large.py", .{ .mtime = 0, .size = 0, .hash = 0, .seen = false });
+    try applyKnownFile(io, &store, &explorer, queue, &known, tmp.dir, "large.py", "large.py", stat, true, &arena, root);
+    const initial_seq = store.currentSeq();
+    for (0..3) |_| try applyKnownFile(io, &store, &explorer, queue, &known, tmp.dir, "large.py", "large.py", stat, true, &arena, root);
+    try std.testing.expectEqual(initial_seq, store.currentSeq());
+    // A genuine metadata change above the cap still records one version.
+    known.getPtr("large.py").?.ctime_ns -= 1;
+    try applyKnownFile(io, &store, &explorer, queue, &known, tmp.dir, "large.py", "large.py", stat, true, &arena, root);
+    try std.testing.expectEqual(initial_seq + 1, store.currentSeq());
+    try tmp.dir.writeFile(io, .{ .sub_path = "large.py", .data = "def now_indexable():\n    return 1\n" });
+    stat = try tmp.dir.statFile(io, "large.py", .{ .follow_symlinks = false });
+    try applyKnownFile(io, &store, &explorer, queue, &known, tmp.dir, "large.py", "large.py", stat, true, &arena, root);
+    try std.testing.expectEqual(initial_seq + 2, store.currentSeq());
+    var outline: std.ArrayList(u8) = .empty;
+    defer outline.deinit(alloc);
+    try std.testing.expect(try explorer.renderOutline("large.py", alloc, &outline, false));
+    try std.testing.expect(std.mem.indexOf(u8, outline.items, "now_indexable") != null);
 }
 
 test "watch budget fallback detects same-metadata rewrites" {
