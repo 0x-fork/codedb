@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.5862 - 2026-10-27
+
+- Enable the Zig bbtree inline-key dictionary by default for warm mmap word indexes. Keep postings zero-copy and preserve exact/prefix results, ranking, hosted fallback, and ANN candidate breadth (#772).
+- Bound accelerator memory to one exact-size slab, at most 8 MiB per mmap word index. Over-budget dictionaries and allocation failures retain complete binary search; promotion frees the slab before unmapping.
+- Include the isolated macOS watcher CPU fixes already integrated in 0.2.5861 via #758/#771, without importing unrelated changes from #750.
+
 ## 0.2.5861 - 2026-10-26
 
 - Use recursive macOS events on local APFS/HFS volumes, with at most 64 content probes every two seconds and directory audits every 60 seconds, reducing idle watcher CPU (#756, #758). Fallback filesystems retain conservative polling. Each MCP client still owns a watcher.

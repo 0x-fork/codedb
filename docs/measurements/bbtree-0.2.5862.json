@@ -1,0 +1,469 @@
+{
+  "version": "0.2.5862",
+  "method": {
+    "platform": "arm64 macOS",
+    "zig": "0.17.0-dev.813+2153f8143",
+    "lookup_rounds": 7,
+    "rss_pairs": 6,
+    "rss_command": "bench-engine word function 10000",
+    "rss_metric": "macOS time -l peak resident bytes",
+    "accelerator_cap_bytes": 8388608
+  },
+  "corpora": {
+    "codedb": {
+      "lookup": {
+        "corpus": {
+          "files": 64,
+          "source_bytes": 3123603,
+          "words": 13031,
+          "queries": 39093,
+          "prefix_parity": 1000,
+          "extra_bytes": 445440,
+          "build_ms": 0.127
+        },
+        "exact": {
+          "binary_median_ns": 129.96,
+          "bbtree_median_ns": 90.94,
+          "paired_latency_change_pct": -29.572649572649567
+        },
+        "prefix": {
+          "binary_median_ns": 469.0,
+          "bbtree_median_ns": 389.0,
+          "paired_latency_change_pct": -18.76332622601279
+        }
+      },
+      "native_cli_rss": {
+        "source_files": 64,
+        "skipped_source_files": 0,
+        "binary_median_peak_rss_bytes": 10158080.0,
+        "bbtree_median_peak_rss_bytes": 10649600.0,
+        "median_peak_rss_delta_bytes": 491520.0,
+        "median_peak_rss_delta_pct": 4.838709677419355,
+        "samples": [
+          {
+            "implementation": "binary",
+            "peak_rss_bytes": 10174464,
+            "hits": 247,
+            "p50_ns": 0,
+            "p99_ns": 1000,
+            "pair": 0
+          },
+          {
+            "implementation": "bbtree",
+            "peak_rss_bytes": 10633216,
+            "hits": 247,
+            "p50_ns": 0,
+            "p99_ns": 1000,
+            "pair": 0
+          },
+          {
+            "implementation": "bbtree",
+            "peak_rss_bytes": 10616832,
+            "hits": 247,
+            "p50_ns": 0,
+            "p99_ns": 1000,
+            "pair": 1
+          },
+          {
+            "implementation": "binary",
+            "peak_rss_bytes": 10158080,
+            "hits": 247,
+            "p50_ns": 0,
+            "p99_ns": 1000,
+            "pair": 1
+          },
+          {
+            "implementation": "binary",
+            "peak_rss_bytes": 10158080,
+            "hits": 247,
+            "p50_ns": 0,
+            "p99_ns": 1000,
+            "pair": 2
+          },
+          {
+            "implementation": "bbtree",
+            "peak_rss_bytes": 10731520,
+            "hits": 247,
+            "p50_ns": 0,
+            "p99_ns": 1000,
+            "pair": 2
+          },
+          {
+            "implementation": "bbtree",
+            "peak_rss_bytes": 10682368,
+            "hits": 247,
+            "p50_ns": 0,
+            "p99_ns": 1000,
+            "pair": 3
+          },
+          {
+            "implementation": "binary",
+            "peak_rss_bytes": 10141696,
+            "hits": 247,
+            "p50_ns": 0,
+            "p99_ns": 1000,
+            "pair": 3
+          },
+          {
+            "implementation": "binary",
+            "peak_rss_bytes": 10174464,
+            "hits": 247,
+            "p50_ns": 0,
+            "p99_ns": 1000,
+            "pair": 4
+          },
+          {
+            "implementation": "bbtree",
+            "peak_rss_bytes": 10665984,
+            "hits": 247,
+            "p50_ns": 0,
+            "p99_ns": 1000,
+            "pair": 4
+          },
+          {
+            "implementation": "bbtree",
+            "peak_rss_bytes": 10600448,
+            "hits": 247,
+            "p50_ns": 0,
+            "p99_ns": 1000,
+            "pair": 5
+          },
+          {
+            "implementation": "binary",
+            "peak_rss_bytes": 10158080,
+            "hits": 247,
+            "p50_ns": 0,
+            "p99_ns": 1000,
+            "pair": 5
+          }
+        ]
+      }
+    },
+    "codegraff": {
+      "lookup": {
+        "corpus": {
+          "files": 2119,
+          "source_bytes": 16982003,
+          "words": 42100,
+          "queries": 126300,
+          "prefix_parity": 1000,
+          "extra_bytes": 1436672,
+          "build_ms": 0.568
+        },
+        "exact": {
+          "binary_median_ns": 289.94,
+          "bbtree_median_ns": 166.0,
+          "paired_latency_change_pct": -44.70285175241274
+        },
+        "prefix": {
+          "binary_median_ns": 581.0,
+          "bbtree_median_ns": 489.0,
+          "paired_latency_change_pct": -13.237639553429027
+        }
+      },
+      "native_cli_rss": {
+        "source_files": 2119,
+        "skipped_source_files": 0,
+        "binary_median_peak_rss_bytes": 47079424.0,
+        "bbtree_median_peak_rss_bytes": 48537600.0,
+        "median_peak_rss_delta_bytes": 1458176.0,
+        "median_peak_rss_delta_pct": 3.097268139899078,
+        "samples": [
+          {
+            "implementation": "binary",
+            "peak_rss_bytes": 47562752,
+            "hits": 2675,
+            "p50_ns": 2000,
+            "p99_ns": 2000,
+            "pair": 0
+          },
+          {
+            "implementation": "bbtree",
+            "peak_rss_bytes": 48791552,
+            "hits": 2675,
+            "p50_ns": 2000,
+            "p99_ns": 2000,
+            "pair": 0
+          },
+          {
+            "implementation": "bbtree",
+            "peak_rss_bytes": 48447488,
+            "hits": 2675,
+            "p50_ns": 2000,
+            "p99_ns": 2000,
+            "pair": 1
+          },
+          {
+            "implementation": "binary",
+            "peak_rss_bytes": 47071232,
+            "hits": 2675,
+            "p50_ns": 2000,
+            "p99_ns": 3000,
+            "pair": 1
+          },
+          {
+            "implementation": "binary",
+            "peak_rss_bytes": 46923776,
+            "hits": 2675,
+            "p50_ns": 2000,
+            "p99_ns": 2000,
+            "pair": 2
+          },
+          {
+            "implementation": "bbtree",
+            "peak_rss_bytes": 48889856,
+            "hits": 2675,
+            "p50_ns": 2000,
+            "p99_ns": 2000,
+            "pair": 2
+          },
+          {
+            "implementation": "bbtree",
+            "peak_rss_bytes": 48463872,
+            "hits": 2675,
+            "p50_ns": 2000,
+            "p99_ns": 3000,
+            "pair": 3
+          },
+          {
+            "implementation": "binary",
+            "peak_rss_bytes": 47087616,
+            "hits": 2675,
+            "p50_ns": 2000,
+            "p99_ns": 2000,
+            "pair": 3
+          },
+          {
+            "implementation": "binary",
+            "peak_rss_bytes": 46759936,
+            "hits": 2675,
+            "p50_ns": 2000,
+            "p99_ns": 2000,
+            "pair": 4
+          },
+          {
+            "implementation": "bbtree",
+            "peak_rss_bytes": 48578560,
+            "hits": 2675,
+            "p50_ns": 2000,
+            "p99_ns": 2000,
+            "pair": 4
+          },
+          {
+            "implementation": "bbtree",
+            "peak_rss_bytes": 48496640,
+            "hits": 2675,
+            "p50_ns": 2000,
+            "p99_ns": 2000,
+            "pair": 5
+          },
+          {
+            "implementation": "binary",
+            "peak_rss_bytes": 47136768,
+            "hits": 2675,
+            "p50_ns": 2000,
+            "p99_ns": 2000,
+            "pair": 5
+          }
+        ]
+      }
+    },
+    "zigrepper": {
+      "lookup": {
+        "corpus": {
+          "files": 1548,
+          "source_bytes": 12160841,
+          "words": 36994,
+          "queries": 110982,
+          "prefix_parity": 1000,
+          "extra_bytes": 1262592,
+          "build_ms": 0.414
+        },
+        "exact": {
+          "binary_median_ns": 239.18,
+          "bbtree_median_ns": 165.55,
+          "paired_latency_change_pct": -30.244806809084402
+        },
+        "prefix": {
+          "binary_median_ns": 595.0,
+          "bbtree_median_ns": 533.0,
+          "paired_latency_change_pct": -11.472602739726023
+        }
+      },
+      "native_cli_rss": {
+        "source_files": 1548,
+        "skipped_source_files": 10,
+        "binary_median_peak_rss_bytes": 34430976.0,
+        "bbtree_median_peak_rss_bytes": 35700736.0,
+        "median_peak_rss_delta_bytes": 1269760.0,
+        "median_peak_rss_delta_pct": 3.6878420176064717,
+        "samples": [
+          {
+            "implementation": "binary",
+            "peak_rss_bytes": 34324480,
+            "hits": 4214,
+            "p50_ns": 3000,
+            "p99_ns": 3000,
+            "pair": 0
+          },
+          {
+            "implementation": "bbtree",
+            "peak_rss_bytes": 35700736,
+            "hits": 4214,
+            "p50_ns": 3000,
+            "p99_ns": 3000,
+            "pair": 0
+          },
+          {
+            "implementation": "bbtree",
+            "peak_rss_bytes": 35700736,
+            "hits": 4214,
+            "p50_ns": 3000,
+            "p99_ns": 3000,
+            "pair": 1
+          },
+          {
+            "implementation": "binary",
+            "peak_rss_bytes": 34373632,
+            "hits": 4214,
+            "p50_ns": 2000,
+            "p99_ns": 3000,
+            "pair": 1
+          },
+          {
+            "implementation": "binary",
+            "peak_rss_bytes": 34521088,
+            "hits": 4214,
+            "p50_ns": 3000,
+            "p99_ns": 3000,
+            "pair": 2
+          },
+          {
+            "implementation": "bbtree",
+            "peak_rss_bytes": 35766272,
+            "hits": 4214,
+            "p50_ns": 2000,
+            "p99_ns": 3000,
+            "pair": 2
+          },
+          {
+            "implementation": "bbtree",
+            "peak_rss_bytes": 35651584,
+            "hits": 4214,
+            "p50_ns": 3000,
+            "p99_ns": 3000,
+            "pair": 3
+          },
+          {
+            "implementation": "binary",
+            "peak_rss_bytes": 34308096,
+            "hits": 4214,
+            "p50_ns": 3000,
+            "p99_ns": 3000,
+            "pair": 3
+          },
+          {
+            "implementation": "binary",
+            "peak_rss_bytes": 34537472,
+            "hits": 4214,
+            "p50_ns": 2000,
+            "p99_ns": 3000,
+            "pair": 4
+          },
+          {
+            "implementation": "bbtree",
+            "peak_rss_bytes": 35667968,
+            "hits": 4214,
+            "p50_ns": 3000,
+            "p99_ns": 3000,
+            "pair": 4
+          },
+          {
+            "implementation": "bbtree",
+            "peak_rss_bytes": 36044800,
+            "hits": 4214,
+            "p50_ns": 3000,
+            "p99_ns": 3000,
+            "pair": 5
+          },
+          {
+            "implementation": "binary",
+            "peak_rss_bytes": 34488320,
+            "hits": 4214,
+            "p50_ns": 3000,
+            "p99_ns": 3000,
+            "pair": 5
+          }
+        ]
+      }
+    }
+  },
+  "watcher": [
+    {
+      "budget": 32,
+      "clients": 3,
+      "directories": 1200,
+      "source_files": 4800,
+      "phases": [
+        {
+          "phase": "quiet",
+          "cpu_percent_per_client": [
+            0.6855512787589788,
+            0.6569866421440215,
+            0.5427280956841918
+          ],
+          "wall_seconds": 35.008322125
+        },
+        {
+          "phase": "churn",
+          "cpu_percent_per_client": [
+            1.4569310020584922,
+            1.3997964529581588,
+            1.3712291784079924
+          ],
+          "wall_seconds": 35.005089416
+        }
+      ],
+      "unchanged_under_excluded_churn": true,
+      "alive": true,
+      "rss_kib": [
+        123856,
+        84128,
+        84992
+      ],
+      "mutation_checks_passed": 61,
+      "mutation_checks_total": 61,
+      "failures": 0
+    },
+    {
+      "budget": 1024,
+      "clients": 1,
+      "directories": 1200,
+      "source_files": 4800,
+      "phases": [
+        {
+          "phase": "quiet",
+          "cpu_percent_per_client": [
+            0.8854999240950605
+          ],
+          "wall_seconds": 35.00847279199999
+        },
+        {
+          "phase": "churn",
+          "cpu_percent_per_client": [
+            1.5711053202346972
+          ],
+          "wall_seconds": 35.007201167000005
+        }
+      ],
+      "unchanged_under_excluded_churn": true,
+      "alive": true,
+      "rss_kib": [
+        105328
+      ],
+      "mutation_checks_passed": 61,
+      "mutation_checks_total": 61,
+      "failures": 0
+    }
+  ]
+}

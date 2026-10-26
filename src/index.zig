@@ -1,6 +1,7 @@
 const std = @import("std");
 const cio = @import("cio.zig");
 const ContentCache = @import("hot_cache.zig").ContentCache;
+const BBDictionary = @import("bbtree_dictionary.zig").Dictionary;
 
 // ── Inverted word index ─────────────────────────────────────
 // Maps word → list of (path, line) hits. O(1) word lookup.
@@ -34,13 +35,22 @@ pub const WordIndex = struct {
     /// Sum of all values in doc_lengths.
     total_tokens: u64 = 0,
     /// Zero-copy read mode: when non-null, the postings live in this mmap'd
-    /// word.index file and `index` is empty — search/searchPrefix binary-search
-    /// the sorted on-disk words instead. The first write promotes to a heap
-    /// index (promoteIfBorrowed). Cuts warm-daemon RSS from ~4x the file to a
+    /// word.index file and `index` is empty — search/searchPrefix use a bounded
+    /// bbtree dictionary, with complete binary search as the low-memory fallback.
+    /// The first write promotes to a heap index (promoteIfBorrowed).
+    /// Cuts warm-daemon RSS from ~4x the file to a
     /// small word directory + touched pages.
     mmap_data: ?[]align(std.heap.page_size_min) const u8 = null,
     /// Byte offset of each sorted word record in mmap_data, for binary search.
     word_dir: []u32 = &.{},
+    /// Default mmap accelerator; at most 8 MiB, with unchanged disk/posting data.
+    bb_dictionary: ?BBDictionary = null,
+
+    pub fn enableBBDictionary(self: *WordIndex) !void {
+        if (self.bb_dictionary != null) return;
+        const data = self.mmap_data orelse return error.NotMmapBacked;
+        self.bb_dictionary = try BBDictionary.init(self.allocator, data, self.word_dir);
+    }
 
     pub fn hitPath(self: *const WordIndex, hit: WordHit) []const u8 {
         if (hit.doc_id < self.id_to_path.items.len) return self.id_to_path.items[hit.doc_id];
@@ -79,6 +89,7 @@ pub const WordIndex = struct {
     }
 
     pub fn deinit(self: *WordIndex) void {
+        if (self.bb_dictionary) |*dictionary| dictionary.deinit();
         if (self.mmap_data) |m| {
             // Zero-copy mode: index/path_to_id/file_words are empty; id_to_path
             // owns the duped paths; word_dir + doc_lengths are heap; the postings
@@ -452,6 +463,14 @@ pub const WordIndex = struct {
     /// offsets), hence align(1) — fields are read with unaligned loads.
     fn mmapSearch(self: *WordIndex, lower: []const u8) []align(1) const WordHit {
         const data = self.mmap_data.?;
+        if (self.bb_dictionary) |*dictionary| {
+            const rank = dictionary.find(lower) orelse return &.{};
+            const off = self.word_dir[rank];
+            const wlen = std.mem.readInt(u16, data[off..][0..2], .little);
+            const hc_off = off + 2 + wlen;
+            const hit_count = std.mem.readInt(u32, data[hc_off..][0..4], .little);
+            return std.mem.bytesAsSlice(WordHit, data[hc_off + 4 ..][0 .. @as(usize, hit_count) * @sizeOf(WordHit)]);
+        }
         var lo: usize = 0;
         var hi: usize = self.word_dir.len;
         while (lo < hi) {
@@ -509,6 +528,8 @@ pub const WordIndex = struct {
         // Commit: drop the (empty) mmap-mode maps + unmap, install heap maps.
         self.index.deinit();
         self.path_to_id.deinit();
+        if (self.bb_dictionary) |*dictionary| dictionary.deinit();
+        self.bb_dictionary = null;
         self.allocator.free(self.word_dir);
         cio.munmap(data);
         self.index = new_index;
@@ -583,7 +604,10 @@ pub const WordIndex = struct {
             // Sorted on-disk words: binary-search the prefix lower bound, then
             // walk forward while the word still starts with `prefix`.
             var lo: usize = 0;
-            var hi: usize = self.word_dir.len;
+            var hi: usize = if (self.bb_dictionary) |*dictionary| blk: {
+                lo = dictionary.lowerBound(prefix);
+                break :blk lo;
+            } else self.word_dir.len;
             while (lo < hi) {
                 const mid = lo + (hi - lo) / 2;
                 const off = self.word_dir[mid];
@@ -918,7 +942,15 @@ pub const WordIndex = struct {
     /// WordIndex in zero-copy mode (first write promotes to heap). Null on any
     /// malformation — caller can fall back to readFromDisk.
     pub fn mmapFromDisk(io: std.Io, dir_path: []const u8, allocator: std.mem.Allocator) ?WordIndex {
-        return mmapFromDiskInner(io, dir_path, allocator) catch null;
+        return mmapFromDiskWithDictionary(io, dir_path, allocator, true);
+    }
+
+    /// Explicit binary-search control for paired resource/correctness checks.
+    /// Failure to allocate the accelerator never drops words or postings.
+    pub fn mmapFromDiskWithDictionary(io: std.Io, dir_path: []const u8, allocator: std.mem.Allocator, enabled: bool) ?WordIndex {
+        var result = (mmapFromDiskInner(io, dir_path, allocator) catch return null) orelse return null;
+        if (enabled) result.enableBBDictionary() catch {};
+        return result;
     }
 
     fn mmapFromDiskInner(io: std.Io, dir_path: []const u8, allocator: std.mem.Allocator) !?WordIndex {

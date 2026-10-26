@@ -1,0 +1,71 @@
+{
+  "codedb": {
+    "exact": {
+      "binary_median_ns": 118.75,
+      "bbtree_median_ns": 86.45,
+      "paired_latency_change_pct": -27.5621052631579
+    },
+    "prefix": {
+      "binary_median_ns": 402.0,
+      "bbtree_median_ns": 340.0,
+      "paired_latency_change_pct": -15.211970074812964
+    },
+    "corpus": {
+      "files": 63,
+      "source_bytes": 3085391,
+      "words": 12913,
+      "queries": 38739,
+      "prefix_parity": 1000,
+      "extra_bytes": 435712,
+      "build_ms": 0.149
+    },
+    "working_tree_dirty": true,
+    "skipped_source_files": 0
+  },
+  "codegraff": {
+    "exact": {
+      "binary_median_ns": 175.89,
+      "bbtree_median_ns": 107.9,
+      "paired_latency_change_pct": -36.88203769494791
+    },
+    "prefix": {
+      "binary_median_ns": 467.0,
+      "bbtree_median_ns": 381.0,
+      "paired_latency_change_pct": -20.171673819742487
+    },
+    "corpus": {
+      "files": 2119,
+      "source_bytes": 16982003,
+      "words": 42100,
+      "queries": 126300,
+      "prefix_parity": 1000,
+      "extra_bytes": 1436672,
+      "build_ms": 0.427
+    },
+    "working_tree_dirty": false,
+    "skipped_source_files": 0
+  },
+  "zigrepper": {
+    "exact": {
+      "binary_median_ns": 155.44,
+      "bbtree_median_ns": 101.93,
+      "paired_latency_change_pct": -33.979378752284006
+    },
+    "prefix": {
+      "binary_median_ns": 470.0,
+      "bbtree_median_ns": 391.0,
+      "paired_latency_change_pct": -14.660831509846828
+    },
+    "corpus": {
+      "files": 1548,
+      "source_bytes": 12160841,
+      "words": 36994,
+      "queries": 110982,
+      "prefix_parity": 1000,
+      "extra_bytes": 1262592,
+      "build_ms": 0.361
+    },
+    "working_tree_dirty": true,
+    "skipped_source_files": 10
+  }
+}

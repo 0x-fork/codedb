@@ -3328,6 +3328,11 @@ test "mmap word index: zero-copy load matches heap load and promotes on write" {
     var mm = WordIndex.mmapFromDisk(io, dir, alloc).?;
     defer mm.deinit(); // picks the right path (mmap, or heap after promote)
     try testing.expect(mm.mmap_data != null);
+    try testing.expect(mm.bb_dictionary != null);
+    var binary = WordIndex.mmapFromDiskWithDictionary(io, dir, alloc, false).?;
+    defer binary.deinit();
+    try testing.expect(binary.bb_dictionary == null);
+    try testing.expectEqualSlices(u8, std.mem.sliceAsBytes(binary.search("alphaToken")), std.mem.sliceAsBytes(mm.search("alphaToken")));
 
     // search parity (exact)
     try testing.expectEqual(heap.search("alphaToken").len, mm.search("alphaToken").len);
@@ -3362,6 +3367,7 @@ test "mmap word index: zero-copy load matches heap load and promotes on write" {
     // Promote on write: a mutation materializes a heap index, then stays queryable.
     try mm.indexFile("src/c.zig", "pub fn gammaToken() void {}\n");
     try testing.expect(mm.mmap_data == null);
+    try testing.expect(mm.bb_dictionary == null);
     const g = try mm.searchDeduped("gammaToken", alloc);
     defer alloc.free(g);
     try testing.expectEqual(@as(usize, 1), g.len);
