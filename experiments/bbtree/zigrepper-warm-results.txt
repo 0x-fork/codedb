@@ -1,0 +1,16 @@
+files=1548 source_bytes=12160841 words=36994 queries=110982 exact/lower-bound parity=all prefix_parity=1000 extra_bytes=1262592 build_ms=0.361
+round=0 implementation=binary exact_ns=183.53 prefix_ns=505.00
+round=0 implementation=bbtree exact_ns=101.93 prefix_ns=391.00
+round=1 implementation=bbtree exact_ns=101.17 prefix_ns=390.00
+round=1 implementation=binary exact_ns=153.24 prefix_ns=457.00
+round=2 implementation=binary exact_ns=151.09 prefix_ns=459.00
+round=2 implementation=bbtree exact_ns=109.06 prefix_ns=418.00
+round=3 implementation=bbtree exact_ns=125.97 prefix_ns=418.00
+round=3 implementation=binary exact_ns=155.44 prefix_ns=470.00
+round=4 implementation=binary exact_ns=155.03 prefix_ns=474.00
+round=4 implementation=bbtree exact_ns=95.87 prefix_ns=380.00
+round=5 implementation=bbtree exact_ns=96.98 prefix_ns=387.00
+round=5 implementation=binary exact_ns=164.89 prefix_ns=482.00
+round=6 implementation=binary exact_ns=161.17 prefix_ns=465.00
+round=6 implementation=bbtree exact_ns=108.84 prefix_ns=439.00
+promotion_parity=all checksum=757345946

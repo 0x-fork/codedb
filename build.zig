@@ -84,6 +84,20 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run codedb daemon");
     run_step.dependOn(&run_cmd.step);
 
+    // Opt-in, local-only warm mmap dictionary A/B experiment.
+    const bb_bench = b.addExecutable(.{
+        .name = "bench-bbtree",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/bench_bbtree.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        }),
+    });
+    const bb_run = b.addRunArtifact(bb_bench);
+    bb_run.addPassthruArgs();
+    b.step("bench-bbtree", "Compare bbtree and binary search on warm mmap words").dependOn(&bb_run.step);
+
     // ── Tests (split into independent binaries for faster compilation) ──
     const test_filter = b.option([]const u8, "test-filter", "Only run tests whose name contains this substring");
     const test_step = b.step("test", "Run all tests");
@@ -92,6 +106,8 @@ pub fn build(b: *std.Build) void {
         .{ .name = "test-core", .path = "src/test_core.zig", .needs_nanoregex = false },
         .{ .name = "test-explore", .path = "src/test_explore.zig", .needs_nanoregex = true },
         .{ .name = "test-index", .path = "src/test_index.zig", .needs_nanoregex = true },
+        .{ .name = "test-bbtree", .path = "src/test_bbtree.zig", .needs_nanoregex = false },
+        .{ .name = "test-bbtree-memory", .path = "src/test_bbtree_memory.zig", .needs_nanoregex = false },
         .{ .name = "test-watcher", .path = "src/watcher.zig", .needs_nanoregex = true },
         .{ .name = "test-parser", .path = "src/test_parser.zig", .needs_nanoregex = true },
         .{ .name = "test-search", .path = "src/test_search.zig", .needs_nanoregex = true },
